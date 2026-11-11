@@ -16,6 +16,10 @@ import { updateOperatorMutator } from './update-operator-mutator.js';
 import { regexMutator } from './regex-mutator.js';
 import { optionalChainingMutator } from './optional-chaining-mutator.js';
 import { assignmentOperatorMutator } from './assignment-operator-mutator.js';
+import { typedCallSwapMutator } from './typed-call-swap-mutator.js';
+import { typedArgumentSwapMutator } from './typed-argument-swap-mutator.js';
+import { typedValueSwapMutator } from './typed-value-swap-mutator.js';
+import { typedDefaultMutator } from './typed-default-mutator.js';
 
 export const allMutators: NodeMutator[] = [
   arithmeticOperatorMutator,
@@ -35,4 +39,9 @@ export const allMutators: NodeMutator[] = [
   regexMutator,
   optionalChainingMutator,
   assignmentOperatorMutator,
+  // Type-aware mutators, these only generate mutants when type-aware mutation is enabled
+  typedCallSwapMutator,
+  typedArgumentSwapMutator,
+  typedValueSwapMutator,
+  typedDefaultMutator,
 ];

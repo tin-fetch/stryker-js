@@ -88,6 +88,7 @@ describe(OptionsValidator.name, () => {
         mutator: {
           excludedMutations: [],
           plugins: null,
+          typeAware: { enabled: false, maxCandidatesPerSite: 3 },
         },
         plugins: ['@stryker-mutator/*'],
         reporters: ['clear-text', 'progress', 'html'],

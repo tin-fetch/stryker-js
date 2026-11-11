@@ -108,6 +108,7 @@ describe(MutantInstrumenterExecutor.name, () => {
     const expectedInstrumenterOptions: InstrumenterOptions = {
       ...testInjector.options.mutator,
       ignorers: [],
+      tsconfigFile: testInjector.options.tsconfigFile,
     };
     sinon.assert.calledOnceWithExactly(
       instrumenterMock.instrument,
@@ -126,6 +127,7 @@ describe(MutantInstrumenterExecutor.name, () => {
     const expectedInstrumenterOptions: InstrumenterOptions = {
       ...testInjector.options.mutator,
       ignorers: [notIgnorer],
+      tsconfigFile: testInjector.options.tsconfigFile,
     };
     sinon.assert.calledOnceWithExactly(
       instrumenterMock.instrument,

@@ -61,6 +61,7 @@ export default /** @type {import('typescript-eslint').ConfigArray} */ (
         '*.d.ts',
         'packages/*/dist/',
         'packages/*/testResources/**',
+        'packages/*/tools/**',
         'packages/*/src-generated/**',
         'packages/*/reports/**',
         'packages/*/coverage/**',

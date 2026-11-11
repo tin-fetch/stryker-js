@@ -91,6 +91,7 @@ describe(Instrumenter.name, () => {
       ],
       logger: testInjector.logger,
       isExpressionContext: false,
+      typeOracle: undefined,
     });
   });
 

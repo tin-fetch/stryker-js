@@ -69,7 +69,11 @@ export class MutantInstrumenterExecutor {
     );
     const instrumentResult = await instrumenter.instrument(
       await this.readFilesToMutate(),
-      { ignorers, ...this.options.mutator },
+      {
+        ignorers,
+        ...this.options.mutator,
+        tsconfigFile: this.options.tsconfigFile,
+      },
     );
 
     // Preprocess the project

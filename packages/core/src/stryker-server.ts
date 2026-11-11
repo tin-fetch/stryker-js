@@ -253,6 +253,7 @@ export class StrykerServer {
       const instrumentResult = await instrumenter.instrument(filesToMutate, {
         ignorers,
         ...options.mutator,
+        tsconfigFile: options.tsconfigFile,
       });
       const mutants = instrumentResult.mutants.map((mutant) => ({
         ...mutant,

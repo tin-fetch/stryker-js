@@ -158,6 +158,87 @@ describe('instrumenter integration', () => {
     });
   });
 
+  describe('type-aware mutation', () => {
+    it('should generate type-aware mutants based on the tsconfig file', async () => {
+      const fileName = resolveTestResource(
+        'instrumenter',
+        'type-aware',
+        'order-service.ts',
+      );
+      const result = await sut.instrument(
+        [
+          {
+            name: fileName,
+            mutate: true,
+            content: await fsPromises.readFile(fileName, 'utf-8'),
+          },
+        ],
+        createInstrumenterOptions({
+          typeAware: { enabled: true, maxCandidatesPerSite: 3 },
+          tsconfigFile: resolveTestResource(
+            'instrumenter',
+            'type-aware',
+            'tsconfig.json',
+          ),
+        }),
+      );
+      const typedMutants = result.mutants
+        .filter(({ mutatorName }) => mutatorName.startsWith('Typed'))
+        .map(({ mutatorName, replacement }) => `${mutatorName}: ${replacement}`)
+        .sort();
+      expect(typedMutants).deep.eq(
+        [
+          // pageNumbers: range(1, order.items.length)
+          'TypedArgumentSwap: range(order.items.length, 1)',
+          'TypedDefault: []', // range(...)
+          'TypedDefault: []', // order.items
+          // range: no TypedCallSwap for `result.push(i)`, library methods with the same signature (`at`, `fill`) aren't named similarly enough
+          'TypedDefault: []', // return result
+          // range: for (let i = start; i < end; i++) result.push(i);
+          'TypedValueSwap: end',
+          'TypedValueSwap: end',
+          'TypedValueSwap: end',
+          'TypedValueSwap: i',
+          'TypedValueSwap: start',
+          'TypedValueSwap: start',
+          'TypedValueSwap: start',
+          // formatAddress
+          'TypedValueSwap: address.city',
+          'TypedValueSwap: address.street',
+          // shippingLabel
+          'TypedValueSwap: order.billingAddress',
+          // loadOrder
+          'TypedDefault: Promise.reject(new Error("Stryker typed default"))',
+        ].sort(),
+      );
+      chaiJestSnapshot.setFilename(`${fileName}.out.snap`);
+      expect(result.files[0].content).matchSnapshot();
+    });
+
+    it('should not generate type-aware mutants when disabled', async () => {
+      const fileName = resolveTestResource(
+        'instrumenter',
+        'type-aware',
+        'order-service.ts',
+      );
+      const result = await sut.instrument(
+        [
+          {
+            name: fileName,
+            mutate: true,
+            content: await fsPromises.readFile(fileName, 'utf-8'),
+          },
+        ],
+        createInstrumenterOptions(),
+      );
+      expect(
+        result.mutants.filter(({ mutatorName }) =>
+          mutatorName.startsWith('Typed'),
+        ),
+      ).lengthOf(0);
+    });
+  });
+
   async function arrangeAndActAssert(
     file: Omit<File, 'content'> | string,
     options = createInstrumenterOptions(),

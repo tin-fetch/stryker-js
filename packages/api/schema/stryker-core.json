@@ -208,6 +208,29 @@
             "type": "string"
           },
           "default": []
+        },
+        "typeAware": {
+          "description": "EXPERIMENTAL: Enable type-aware mutators (TypedCallSwap, TypedArgumentSwap, TypedValueSwap, TypedDefault). These use the TypeScript type checker (based on `tsconfigFile`) to replace calls, arguments and values with type-compatible alternatives. Requires the `typescript` package.",
+          "$ref": "#/definitions/typeAwareMutatorOptions",
+          "default": {}
+        }
+      }
+    },
+    "typeAwareMutatorOptions": {
+      "title": "TypeAwareMutatorOptions",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Enable the type-aware mutators.",
+          "type": "boolean",
+          "default": false
+        },
+        "maxCandidatesPerSite": {
+          "description": "The maximum number of mutants each type-aware mutator generates for a single location. Candidates are ranked by how plausible the confusion is (name similarity).",
+          "type": "integer",
+          "minimum": 1,
+          "default": 3
         }
       }
     },

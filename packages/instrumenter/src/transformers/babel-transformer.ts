@@ -32,7 +32,7 @@ type PlacementMap = Map<types.Node, MutantsPlacement<types.Node>>;
 export const transformBabel: AstTransformer<ScriptFormat> = (
   { root, originFileName, rawContent, offset },
   mutantCollector,
-  { options, mutateDescription, logger, isExpressionContext },
+  { options, mutateDescription, logger, isExpressionContext, typeOracle },
   mutators = allMutators,
   mutantPlacers = allMutantPlacers,
 ) => {
@@ -41,6 +41,12 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
   // The File constructor only reads `filename` (and `highlightCode`) from the
   // options at runtime, but since Babel 8 its type requires a fully resolved
   // options object, hence the cast.
+  // Type information is only available for files that are part of the TypeScript program (not for scripts embedded in html, vue or svelte files)
+  const fileTypeOracle =
+    offset === undefined
+      ? typeOracle?.forFile(originFileName, rawContent)
+      : undefined;
+
   const file = new File(
     { filename: originFileName } as unknown as ConstructorParameters<
       typeof File
@@ -257,7 +263,10 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
    */
   function* mutate(node: NodePath): Iterable<Mutable> {
     for (const mutator of mutators) {
-      for (const replacement of mutator.mutate(node, { isExpressionContext })) {
+      for (const replacement of mutator.mutate(node, {
+        isExpressionContext,
+        typeOracle: fileTypeOracle,
+      })) {
         yield {
           replacement,
           mutatorName: mutator.name,

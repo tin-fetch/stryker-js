@@ -3,6 +3,7 @@ import { I } from '@stryker-mutator/util';
 import { Logger } from '@stryker-mutator/api/logging';
 
 import { Ast, AstByFormat, AstFormat } from '../syntax/index.js';
+import type { TypeOracle } from '../type-info/index.js';
 
 import { TransformerOptions } from './transformer-options.js';
 import { transformBabel } from './babel-transformer.js';
@@ -53,4 +54,6 @@ export interface TransformerContext {
   logger: Logger;
   /** Script source was an expression */
   isExpressionContext: boolean;
+  /** Type information, only available when type-aware mutation is enabled */
+  typeOracle?: TypeOracle;
 }

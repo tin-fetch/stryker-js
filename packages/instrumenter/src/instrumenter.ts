@@ -11,6 +11,7 @@ import { InstrumentResult } from './instrument-result.js';
 import { InstrumenterOptions } from './instrumenter-options.js';
 import { instrumenterTokens } from './instrumenter-tokens.js';
 import { File } from './file.js';
+import { createTsTypeOracle, TypeOracle } from './type-info/index.js';
 
 /**
  * The instrumenter is responsible for
@@ -46,6 +47,7 @@ export class Instrumenter {
     const outFiles: File[] = [];
     let mutantCount = 0;
     const parse = this._createParser(options);
+    const typeOracle = await this.createTypeOracle(options);
     for (const { name, mutate, content } of files) {
       const ast = await parse(content, name);
       this._transform(ast, mutantCollector, {
@@ -53,6 +55,7 @@ export class Instrumenter {
         mutateDescription: toBabelLineNumber(mutate),
         logger: this.logger,
         isExpressionContext: false,
+        typeOracle,
       });
       const mutatedContent = this._print(ast);
       outFiles.push({
@@ -80,6 +83,19 @@ export class Instrumenter {
       files: outFiles,
       mutants,
     };
+  }
+
+  private async createTypeOracle(
+    options: InstrumenterOptions,
+  ): Promise<TypeOracle | undefined> {
+    if (!options.typeAware?.enabled) {
+      return undefined;
+    }
+    return createTsTypeOracle(
+      options.tsconfigFile ?? 'tsconfig.json',
+      { maxCandidatesPerSite: options.typeAware.maxCandidatesPerSite },
+      this.logger,
+    );
   }
 }
 
