@@ -209,6 +209,18 @@ describe('instrumenter integration', () => {
           'TypedValueSwap: order.billingAddress',
           // loadOrder
           'TypedDefault: Promise.reject(new Error("Stryker typed default"))',
+          // createShipment: return { from: order.billingAddress, to: order.shippingAddress }
+          'TypedPropertySwap: {\n  from: order.shippingAddress,\n  to: order.billingAddress\n}',
+          'TypedValueSwap: order.billingAddress',
+          'TypedValueSwap: order.shippingAddress',
+          // OrderTracker: status: OrderStatus = 'open'
+          'TypedLiteralSwap: "cancelled"',
+          'TypedLiteralSwap: "shipped"',
+          // OrderTracker.ship: this.status = 'shipped'
+          'TypedLiteralSwap: "cancelled"',
+          'TypedLiteralSwap: "open"',
+          // OrderTracker.ship: this.shippedAt = at
+          'TypedTargetSwap: this.cancelledAt = at',
         ].sort(),
       );
       chaiJestSnapshot.setFilename(`${fileName}.out.snap`);

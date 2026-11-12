@@ -106,5 +106,38 @@ export async function loadOrder(fetchOrder: (id: string) => Promise<Order>, id: 
     stryCov_9fa48(\\"27\\");
     return await (stryMutAct_9fa48(\\"28\\") ? Promise.reject(new Error(\\"Stryker typed default\\")) : (stryCov_9fa48(\\"28\\"), fetchOrder(id)));
   }
+}
+export type OrderStatus = 'open' | 'shipped' | 'cancelled';
+export interface Shipment {
+  from: Address;
+  to: Address;
+}
+export function createShipment(order: Order): Shipment {
+  if (stryMutAct_9fa48(\\"29\\")) {
+    {}
+  } else {
+    stryCov_9fa48(\\"29\\");
+    return stryMutAct_9fa48(\\"31\\") ? {
+      from: order.shippingAddress,
+      to: order.billingAddress
+    } : stryMutAct_9fa48(\\"30\\") ? {} : (stryCov_9fa48(\\"30\\", \\"31\\"), {
+      from: stryMutAct_9fa48(\\"32\\") ? order.shippingAddress : (stryCov_9fa48(\\"32\\"), order.billingAddress),
+      to: stryMutAct_9fa48(\\"33\\") ? order.billingAddress : (stryCov_9fa48(\\"33\\"), order.shippingAddress)
+    });
+  }
+}
+export class OrderTracker {
+  status: OrderStatus = stryMutAct_9fa48(\\"36\\") ? \\"cancelled\\" : stryMutAct_9fa48(\\"35\\") ? \\"shipped\\" : stryMutAct_9fa48(\\"34\\") ? \\"\\" : (stryCov_9fa48(\\"34\\", \\"35\\", \\"36\\"), 'open');
+  shippedAt: Date | undefined;
+  cancelledAt: Date | undefined;
+  ship(at: Date): void {
+    if (stryMutAct_9fa48(\\"37\\")) {
+      {}
+    } else {
+      stryCov_9fa48(\\"37\\");
+      this.status = stryMutAct_9fa48(\\"40\\") ? \\"cancelled\\" : stryMutAct_9fa48(\\"39\\") ? \\"open\\" : stryMutAct_9fa48(\\"38\\") ? \\"\\" : (stryCov_9fa48(\\"38\\", \\"39\\", \\"40\\"), 'shipped');
+      stryMutAct_9fa48(\\"41\\") ? this.cancelledAt = at : (stryCov_9fa48(\\"41\\"), this.shippedAt = at);
+    }
+  }
 }"
 `;

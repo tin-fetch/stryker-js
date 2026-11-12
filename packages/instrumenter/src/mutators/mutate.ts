@@ -20,6 +20,9 @@ import { typedCallSwapMutator } from './typed-call-swap-mutator.js';
 import { typedArgumentSwapMutator } from './typed-argument-swap-mutator.js';
 import { typedValueSwapMutator } from './typed-value-swap-mutator.js';
 import { typedDefaultMutator } from './typed-default-mutator.js';
+import { typedLiteralSwapMutator } from './typed-literal-swap-mutator.js';
+import { typedPropertySwapMutator } from './typed-property-swap-mutator.js';
+import { typedTargetSwapMutator } from './typed-target-swap-mutator.js';
 
 export const allMutators: NodeMutator[] = [
   arithmeticOperatorMutator,
@@ -44,4 +47,7 @@ export const allMutators: NodeMutator[] = [
   typedArgumentSwapMutator,
   typedValueSwapMutator,
   typedDefaultMutator,
+  typedLiteralSwapMutator,
+  typedPropertySwapMutator,
+  typedTargetSwapMutator,
 ];

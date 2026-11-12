@@ -7,6 +7,7 @@ import { nameSimilarity, rankCandidates } from './rank.js';
 import {
   Candidate,
   FileTypeOracle,
+  LiteralCandidate,
   SourceRange,
   TypeOracle,
   TypeShape,
@@ -126,7 +127,12 @@ interface ScopeSymbol {
   name: string;
   /** The symbol after resolving import aliases */
   resolved: ts.Symbol;
+  /** Whether the symbol is imported into this file */
+  isImport: boolean;
 }
+
+type LiteralNode =
+  ts.StringLiteral | ts.NoSubstitutionTemplateLiteral | ts.NumericLiteral;
 
 class TsFileTypeOracle implements FileTypeOracle {
   constructor(
@@ -351,6 +357,308 @@ class TsFileTypeOracle implements FileTypeOracle {
     return shapes;
   }
 
+  public alternativeLiterals(range: SourceRange): LiteralCandidate[] {
+    const { ts } = this;
+    const node = this.find(
+      range,
+      (n): n is LiteralNode =>
+        ts.isStringLiteral(n) ||
+        ts.isNoSubstitutionTemplateLiteral(n) ||
+        ts.isNumericLiteral(n),
+    );
+    if (!node || !this.isLiteralValue(node)) {
+      return [];
+    }
+    const expected = this.expectedTypeOfLiteral(node);
+    if (!expected) {
+      return [];
+    }
+    const original = ts.isNumericLiteral(node) ? Number(node.text) : node.text;
+    const members = (expected.isUnion() ? expected.types : [expected]).filter(
+      (member) =>
+        !(
+          member.flags &
+          (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void)
+        ),
+    );
+    const values = new Map<string, string | number>();
+    for (const member of members) {
+      const isSameKind =
+        typeof original === 'number'
+          ? member.isNumberLiteral()
+          : member.isStringLiteral();
+      if (!isSameKind || member.flags & ts.TypeFlags.EnumLiteral) {
+        // Not a union of plain literals of the same kind (e.g. `'a' | number`, or an enum), no plausible siblings
+        return [];
+      }
+      const { value } = member as ts.StringLiteralType | ts.NumberLiteralType;
+      if (value !== original) {
+        values.set(String(value), value);
+      }
+    }
+    return rankCandidates(
+      [...values.keys()].map((name) => ({
+        name,
+        score: nameSimilarity(String(original), name),
+      })),
+      this.max,
+    ).map(({ name, score }) => ({ value: values.get(name)!, score }));
+  }
+
+  public swappablePropertyPairs(range: SourceRange): Array<[number, number]> {
+    const { ts, checker } = this;
+    const objectLiteral = this.find(range, ts.isObjectLiteralExpression);
+    if (!objectLiteral) {
+      return [];
+    }
+    const contextual = checker.getContextualType(objectLiteral);
+    if (!contextual || this.isUseless(contextual)) {
+      return [];
+    }
+    interface Entry {
+      index: number;
+      text: string;
+      valueType: ts.Type;
+      expected: ts.Type;
+    }
+    const entries: Entry[] = [];
+    objectLiteral.properties.forEach((property, index) => {
+      let value: ts.Expression | undefined;
+      let valueType: ts.Type | undefined;
+      if (
+        ts.isPropertyAssignment(property) &&
+        (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
+      ) {
+        value = property.initializer;
+        valueType = checker.getTypeAtLocation(value);
+      } else if (
+        ts.isShorthandPropertyAssignment(property) &&
+        !property.objectAssignmentInitializer
+      ) {
+        value = property.name;
+        const valueSymbol = checker.getShorthandAssignmentValueSymbol(property);
+        valueType =
+          valueSymbol && checker.getTypeOfSymbolAtLocation(valueSymbol, value);
+      }
+      const expected = value && checker.getContextualType(value);
+      if (
+        value &&
+        valueType &&
+        expected &&
+        !this.isUseless(valueType) &&
+        !this.isUseless(expected)
+      ) {
+        entries.push({
+          index,
+          text: value.getText(this.sourceFile),
+          valueType,
+          expected,
+        });
+      }
+    });
+    const pairs: Array<[number, number]> = [];
+    for (let i = 0; i < entries.length; i++) {
+      for (let j = i + 1; j < entries.length; j++) {
+        const a = entries[i];
+        const b = entries[j];
+        if (
+          a.text !== b.text &&
+          checker.isTypeAssignableTo(a.valueType, b.expected) &&
+          checker.isTypeAssignableTo(b.valueType, a.expected)
+        ) {
+          pairs.push([a.index, b.index]);
+        }
+      }
+    }
+    // Adjacent properties are the most likely to be mixed up
+    return pairs
+      .sort(([i1, j1], [i2, j2]) => j1 - i1 - (j2 - i2) || i1 - i2)
+      .slice(0, this.max);
+  }
+
+  public alternativeTargets(range: SourceRange): Candidate[] {
+    const { ts, checker } = this;
+    const target = this.find(
+      range,
+      (n): n is ts.Identifier | ts.PropertyAccessExpression =>
+        ts.isIdentifier(n) || ts.isPropertyAccessExpression(n),
+    );
+    const assignment = target?.parent;
+    if (
+      !target ||
+      !assignment ||
+      !ts.isBinaryExpression(assignment) ||
+      assignment.left !== target ||
+      assignment.operatorToken.kind < ts.SyntaxKind.FirstAssignment ||
+      assignment.operatorToken.kind > ts.SyntaxKind.LastAssignment
+    ) {
+      return [];
+    }
+    const isPlainAssignment =
+      assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+    const targetType = checker.getTypeAtLocation(target);
+    const valueType = checker.getTypeAtLocation(assignment.right);
+    if (this.isUseless(targetType) || this.isUseless(valueType)) {
+      return [];
+    }
+    const fits = (candidateType: ts.Type): boolean => {
+      const widenedCandidate = checker.getBaseTypeOfLiteralType(candidateType);
+      const widenedTarget = checker.getBaseTypeOfLiteralType(targetType);
+      return (
+        !this.isUseless(candidateType) &&
+        checker.isTypeAssignableTo(widenedCandidate, widenedTarget) &&
+        checker.isTypeAssignableTo(widenedTarget, widenedCandidate) &&
+        (!isPlainAssignment ||
+          checker.isTypeAssignableTo(valueType, candidateType))
+      );
+    };
+
+    const candidates: Candidate[] = [];
+    if (ts.isPropertyAccessExpression(target)) {
+      if (!ts.isIdentifier(target.name)) {
+        return [];
+      }
+      for (const property of this.propertiesOf(target)) {
+        const candidate = this.memberCandidate(target.name.text, property);
+        if (
+          candidate &&
+          !(property.flags & ts.SymbolFlags.Method) &&
+          this.isWritable(property, target) &&
+          fits(checker.getTypeOfSymbol(property))
+        ) {
+          candidates.push(candidate);
+        }
+      }
+    } else {
+      const originalSymbol = this.resolve(checker.getSymbolAtLocation(target));
+      if (!originalSymbol) {
+        return [];
+      }
+      for (const { name, resolved, isImport } of this.symbolsInScope(
+        target,
+        ts.SymbolFlags.Variable,
+      )) {
+        const declaration = resolved.valueDeclaration;
+        if (
+          isImport ||
+          resolved === originalSymbol ||
+          !declaration ||
+          ts.getCombinedNodeFlags(declaration) &
+            (ts.NodeFlags.Const | ts.NodeFlags.Using)
+        ) {
+          continue;
+        }
+        if (fits(checker.getTypeOfSymbol(resolved))) {
+          candidates.push({ name, score: nameSimilarity(target.text, name) });
+        }
+      }
+    }
+    return rankCandidates(candidates, this.max);
+  }
+
+  /**
+   * Whether the literal is used as a value, and not as a property name, module specifier, type, etc.
+   */
+  private isLiteralValue(node: LiteralNode): boolean {
+    const { ts } = this;
+    const { parent } = node;
+    if (
+      ts.isLiteralTypeNode(parent) ||
+      ts.isImportDeclaration(parent) ||
+      ts.isExportDeclaration(parent) ||
+      ts.isExternalModuleReference(parent) ||
+      ts.isImportTypeNode(parent) ||
+      ts.isEnumMember(parent) ||
+      ts.isElementAccessExpression(parent) ||
+      ts.isExpressionStatement(parent)
+    ) {
+      return false;
+    }
+    if (ts.isBinaryExpression(parent) && parent.left === node) {
+      // `'key' in obj`
+      return parent.operatorToken.kind !== ts.SyntaxKind.InKeyword;
+    }
+    return (parent as { name?: ts.Node }).name !== node;
+  }
+
+  /**
+   * The type expected at the location of a literal: the contextual type, or the type it is compared with.
+   */
+  private expectedTypeOfLiteral(node: LiteralNode): ts.Type | undefined {
+    const { ts, checker } = this;
+    const contextual = checker.getContextualType(node);
+    if (contextual && !this.isUseless(contextual)) {
+      return contextual;
+    }
+    let current: ts.Node = node;
+    while (ts.isParenthesizedExpression(current.parent)) {
+      current = current.parent;
+    }
+    const { parent } = current;
+    const equalityOperators: ts.SyntaxKind[] = [
+      ts.SyntaxKind.EqualsEqualsEqualsToken,
+      ts.SyntaxKind.ExclamationEqualsEqualsToken,
+      ts.SyntaxKind.EqualsEqualsToken,
+      ts.SyntaxKind.ExclamationEqualsToken,
+    ];
+    let expected: ts.Type | undefined;
+    if (
+      ts.isBinaryExpression(parent) &&
+      equalityOperators.includes(parent.operatorToken.kind)
+    ) {
+      expected = checker.getTypeAtLocation(
+        parent.left === current ? parent.right : parent.left,
+      );
+    } else if (ts.isCaseClause(parent) && parent.expression === current) {
+      expected = checker.getTypeAtLocation(parent.parent.parent.expression);
+    }
+    return expected && !this.isUseless(expected) ? expected : undefined;
+  }
+
+  /**
+   * Whether a property can be assigned at the location of `target`.
+   * Readonly properties can only be assigned in the constructor of the class that declares them.
+   */
+  private isWritable(
+    property: ts.Symbol,
+    target: ts.PropertyAccessExpression,
+  ): boolean {
+    const { ts } = this;
+    if (
+      property.flags & ts.SymbolFlags.GetAccessor &&
+      !(property.flags & ts.SymbolFlags.SetAccessor)
+    ) {
+      return false;
+    }
+    const declarations = property.declarations ?? [];
+    const isReadonly = declarations.some(
+      (declaration) =>
+        ts.getCombinedModifierFlags(declaration) & ts.ModifierFlags.Readonly,
+    );
+    if (!isReadonly) {
+      return true;
+    }
+    if (target.expression.kind !== ts.SyntaxKind.ThisKeyword) {
+      return false;
+    }
+    let container: ts.Node | undefined = target.parent;
+    while (
+      container &&
+      (!ts.isFunctionLike(container) || ts.isArrowFunction(container))
+    ) {
+      container = container.parent;
+    }
+    if (!container || !ts.isConstructorDeclaration(container)) {
+      return false;
+    }
+    const constructor = container;
+    return declarations.some(
+      (declaration) =>
+        declaration.parent === constructor.parent ||
+        declaration.parent === constructor,
+    );
+  }
+
   /**
    * Finds the node matching the exact character range (excluding leading trivia), satisfying the predicate.
    */
@@ -453,7 +761,7 @@ class TsFileTypeOracle implements FileTypeOracle {
         (isHoistedFunction && !containsLocation) ||
         declaredBefore
       ) {
-        result.push({ name: symbol.name, resolved });
+        result.push({ name: symbol.name, resolved, isImport });
       }
     }
     return result;

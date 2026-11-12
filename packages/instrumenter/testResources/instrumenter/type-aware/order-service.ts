@@ -37,3 +37,25 @@ export async function loadOrder(
 ): Promise<Order> {
   return await fetchOrder(id);
 }
+
+export type OrderStatus = 'open' | 'shipped' | 'cancelled';
+
+export interface Shipment {
+  from: Address;
+  to: Address;
+}
+
+export function createShipment(order: Order): Shipment {
+  return { from: order.billingAddress, to: order.shippingAddress };
+}
+
+export class OrderTracker {
+  status: OrderStatus = 'open';
+  shippedAt: Date | undefined;
+  cancelledAt: Date | undefined;
+
+  ship(at: Date): void {
+    this.status = 'shipped';
+    this.shippedAt = at;
+  }
+}

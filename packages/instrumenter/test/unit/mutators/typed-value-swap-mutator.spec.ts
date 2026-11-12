@@ -77,6 +77,15 @@ wait(defaultTimeout);`;
     );
   });
 
+  it('should swap an enum member for another member of the same enum', () => {
+    const code = `enum Status { Active = 'active', Inactive = 'inactive' }
+declare function setStatus(status: Status): void;
+setStatus(Status.Active);`;
+    expectTypedMutation(sut, code, [
+      replaceLast(code, 'Status.Active', 'Status.Inactive'),
+    ]);
+  });
+
   it('should not mutate assignment targets', () => {
     expectTypedMutation(
       sut,

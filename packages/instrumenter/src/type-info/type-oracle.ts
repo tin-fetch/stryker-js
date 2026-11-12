@@ -14,6 +14,14 @@ export interface Candidate {
   score: number;
 }
 
+/**
+ * A replacement literal value proposed by the type oracle, ranked by plausibility (higher is more plausible).
+ */
+export interface LiteralCandidate {
+  value: string | number;
+  score: number;
+}
+
 export type TypeShape = 'array' | 'nullable' | 'promise' | 'undefinedable';
 
 /**
@@ -39,6 +47,19 @@ export interface FileTypeOracle {
    * The type shapes of an expression, used to generate typed default values.
    */
   shapes(expression: SourceRange): TypeShape[];
+  /**
+   * For a string or number literal where a union of literals is expected (`'active' | 'inactive'`): the other members of that union.
+   */
+  alternativeLiterals(literal: SourceRange): LiteralCandidate[];
+  /**
+   * For an object literal with a contextual type: pairs of property indices of which the values can be swapped while staying type-correct.
+   * The indices refer to all properties of the object literal (including methods and spreads).
+   */
+  swappablePropertyPairs(objectLiteral: SourceRange): Array<[number, number]>;
+  /**
+   * For the target of an assignment (`x = ...` or `obj.p = ...`): other writable variables or properties of a compatible type.
+   */
+  alternativeTargets(assignmentTarget: SourceRange): Candidate[];
 }
 
 /**
