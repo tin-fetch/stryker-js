@@ -96,4 +96,50 @@ b++;`,
       [],
     );
   });
+
+  describe('equivalent swaps', () => {
+    it('should not swap a field for its getter', () => {
+      const code = `type Status = 'active' | 'inactive';
+export class Bundle {
+  private _status: Status = 'active';
+  private _previous: Status = 'inactive';
+  get status(): Status {
+    return this._status;
+  }
+  isActive(): boolean {
+    return this._status === 'active';
+  }
+}`;
+      expectTypedMutation(sut, code, [
+        replaceLast(code, 'return this._status;', 'return this._previous;'),
+        replaceLast(
+          code,
+          "this._status === 'active'",
+          "this._previous === 'active'",
+        ),
+      ]);
+    });
+
+    it('should not swap constants with the same value', () => {
+      const code = `const ClearableBy = { duplicate: 'reviewer', unknown: 'reviewer', revised: 'event' };
+declare function clear(by: string): void;
+clear(ClearableBy.duplicate);`;
+      expectTypedMutation(sut, code, [
+        replaceLast(code, 'ClearableBy.duplicate', 'ClearableBy.revised'),
+      ]);
+    });
+
+    it('should still swap new containers and nondeterministic values', () => {
+      const code = `const errors: string[] = [];
+const warnings: string[] = [];
+const start = Date.now();
+const end = Date.now();
+declare function report(items: string[], at: number): void;
+report(errors, start);`;
+      expectTypedMutation(sut, code, [
+        replaceLast(code, 'report(errors', 'report(warnings'),
+        replaceLast(code, 'start);', 'end);'),
+      ]);
+    });
+  });
 });

@@ -53,4 +53,42 @@ export const r = range(n, n);`,
   it('should not swap arguments that are both part of the rest parameter', () => {
     expectTypedMutation(sut, 'export const r = Math.max(1, 2);', []);
   });
+
+  it('should not swap arguments of a function that treats them symmetrically', () => {
+    expectTypedMutation(
+      sut,
+      `interface Item { id: string; version: number }
+function same(left: Item, right: Item): boolean {
+  return left.id === right.id && left.version === right.version;
+}
+declare const a: Item;
+declare const b: Item;
+export const s = same(a, b);`,
+      [],
+    );
+  });
+
+  it('should swap arguments of a function that does not treat them symmetrically', () => {
+    const code = `interface Item { id: string; version: number }
+function newer(left: Item, right: Item): boolean {
+  return left.version > right.version;
+}
+declare const a: Item;
+declare const b: Item;
+export const s = newer(a, b);`;
+    expectTypedMutation(sut, code, [
+      replaceLast(code, 'newer(a, b)', 'newer(b, a)'),
+    ]);
+  });
+
+  it('should not swap constants with the same value', () => {
+    expectTypedMutation(
+      sut,
+      `declare function range(start: number, end: number): number[];
+const first = 1;
+const one = 1;
+export const r = range(first, one);`,
+      [],
+    );
+  });
 });

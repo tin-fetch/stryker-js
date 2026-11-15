@@ -91,4 +91,17 @@ draw({ kind: 'circle', name });`,
       [],
     );
   });
+
+  it('should not swap values that are the same after inlining constants', () => {
+    expectTypedMutation(
+      sut,
+      `interface Schema { positive(): Schema }
+declare const z: { int(): Schema };
+const Amount = z.int();
+const Term = z.int().positive();
+declare function accept(shape: { term: Schema; premium: Schema }): void;
+accept({ term: Term, premium: Amount.positive() });`,
+      [],
+    );
+  });
 });

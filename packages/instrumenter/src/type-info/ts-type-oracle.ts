@@ -3,6 +3,7 @@ import path from 'path';
 import type ts from 'typescript';
 import type { Logger } from '@stryker-mutator/api/logging';
 
+import { EquivalenceFilter } from './equivalence.js';
 import { nameSimilarity, rankCandidates } from './rank.js';
 import {
   Candidate,
@@ -86,6 +87,7 @@ export function createTypeOracleFromProgram(
   options: TypeOracleOptions,
 ): TypeOracle {
   const checker = program.getTypeChecker();
+  const equivalence = new EquivalenceFilter(tsModule, checker, program);
   return {
     forFile(fileName, content) {
       const sourceFile = program.getSourceFile(
@@ -104,6 +106,7 @@ export function createTypeOracleFromProgram(
         checker,
         sourceFile,
         options.maxCandidatesPerSite,
+        equivalence,
       );
     },
   };
@@ -141,12 +144,17 @@ class TsFileTypeOracle implements FileTypeOracle {
     private readonly checker: ts.TypeChecker,
     private readonly sourceFile: ts.SourceFile,
     private readonly max: number,
+    private readonly equivalence: EquivalenceFilter,
   ) {}
 
   public siblingCallees(range: SourceRange): Candidate[] {
     const { ts, checker } = this;
     const call = this.find(range, ts.isCallExpression);
-    if (!call || call.arguments.some(ts.isSpreadElement)) {
+    if (
+      !call ||
+      call.arguments.some(ts.isSpreadElement) ||
+      this.equivalence.skipsCallSite(call)
+    ) {
       return [];
     }
     const argumentTypes = call.arguments.map((arg) =>
@@ -157,8 +165,19 @@ class TsFileTypeOracle implements FileTypeOracle {
     if (returnValueIsUsed && this.isUseless(originalType)) {
       return [];
     }
-    const isCompatible = (candidateType: ts.Type) =>
+    const isCompatible = (
+      candidateName: string,
+      candidateSymbol: ts.Symbol | undefined,
+      candidateType: ts.Type,
+    ) =>
       !this.isUseless(candidateType) &&
+      !this.equivalence.isEquivalentCallSwap(
+        call,
+        candidateName,
+        candidateSymbol,
+        candidateType,
+        returnValueIsUsed,
+      ) &&
       candidateType
         .getCallSignatures()
         .some(
@@ -180,7 +199,11 @@ class TsFileTypeOracle implements FileTypeOracle {
         const candidate = this.memberCandidate(originalName, property);
         if (
           candidate &&
-          isCompatible(checker.getTypeOfSymbolAtLocation(property, callee))
+          isCompatible(
+            property.name,
+            property,
+            checker.getTypeOfSymbolAtLocation(property, callee),
+          )
         ) {
           candidates.push(candidate);
         }
@@ -193,7 +216,11 @@ class TsFileTypeOracle implements FileTypeOracle {
       )) {
         if (
           resolved !== originalSymbol &&
-          isCompatible(checker.getTypeOfSymbolAtLocation(resolved, call))
+          isCompatible(
+            name,
+            resolved,
+            checker.getTypeOfSymbolAtLocation(resolved, call),
+          )
         ) {
           candidates.push({
             name,
@@ -243,7 +270,9 @@ class TsFileTypeOracle implements FileTypeOracle {
           args[i].getText(this.sourceFile) !==
             args[j].getText(this.sourceFile) &&
           checker.isTypeAssignableTo(argumentTypes[i], parameterJ) &&
-          checker.isTypeAssignableTo(argumentTypes[j], parameterI)
+          checker.isTypeAssignableTo(argumentTypes[j], parameterI) &&
+          !this.equivalence.sameValue(args[i], args[j]) &&
+          !this.equivalence.isSymmetric(signature, i, j)
         ) {
           pairs.push([i, j]);
         }
@@ -283,7 +312,8 @@ class TsFileTypeOracle implements FileTypeOracle {
         const type = checker.getTypeOfSymbolAtLocation(property, node);
         if (
           !this.isFunctionLike(type) &&
-          this.valueFits(type, originalType, node)
+          this.valueFits(type, originalType, node) &&
+          !this.equivalence.isEquivalentValueSwap(node, property.name, property)
         ) {
           candidates.push(candidate);
         }
@@ -303,7 +333,8 @@ class TsFileTypeOracle implements FileTypeOracle {
         const type = checker.getTypeOfSymbolAtLocation(resolved, node);
         if (
           !this.isFunctionLike(type) &&
-          this.valueFits(type, originalType, node)
+          this.valueFits(type, originalType, node) &&
+          !this.equivalence.isEquivalentValueSwap(node, name, resolved)
         ) {
           candidates.push({
             name,
@@ -417,6 +448,7 @@ class TsFileTypeOracle implements FileTypeOracle {
     }
     interface Entry {
       index: number;
+      value: ts.Expression;
       text: string;
       valueType: ts.Type;
       expected: ts.Type;
@@ -450,6 +482,7 @@ class TsFileTypeOracle implements FileTypeOracle {
       ) {
         entries.push({
           index,
+          value,
           text: value.getText(this.sourceFile),
           valueType,
           expected,
@@ -464,7 +497,8 @@ class TsFileTypeOracle implements FileTypeOracle {
         if (
           a.text !== b.text &&
           checker.isTypeAssignableTo(a.valueType, b.expected) &&
-          checker.isTypeAssignableTo(b.valueType, a.expected)
+          checker.isTypeAssignableTo(b.valueType, a.expected) &&
+          !this.equivalence.sameValue(a.value, b.value)
         ) {
           pairs.push([a.index, b.index]);
         }
