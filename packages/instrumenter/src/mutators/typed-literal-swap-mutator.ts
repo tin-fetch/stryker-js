@@ -23,8 +23,9 @@ export const typedLiteralSwapMutator: NodeMutator = {
       return;
     }
     for (const { value } of typeOracle.alternativeLiterals(range)) {
+      // `valueToNode` turns a negative number into `-n`; `t.numericLiteral` rejects it
       yield typeof value === 'number'
-        ? t.numericLiteral(value)
+        ? t.valueToNode(value)
         : t.stringLiteral(value);
     }
   },

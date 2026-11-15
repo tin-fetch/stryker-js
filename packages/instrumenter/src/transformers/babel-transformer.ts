@@ -15,7 +15,11 @@ import {
   throwPlacementError,
 } from '../mutant-placers/index.js';
 import { Mutable, Mutant } from '../mutant.js';
-import { allMutators, type NodeMutator } from '../mutators/index.js';
+import {
+  allMutators,
+  isTypeAwareMutator,
+  type NodeMutator,
+} from '../mutators/index.js';
 
 import { DirectiveBookkeeper } from './directive-bookkeeper.js';
 import { IgnorerBookkeeper } from './ignorer-bookkeeper.js';
@@ -141,10 +145,18 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
     if (!filteringMutators) {
       return;
     }
-    const mutantsInScope = mutantCollector.mutants
+    const allMutantsInScope = mutantCollector.mutants
       .slice(subtreeStart)
       .filter((m) => !m.ignoreReason);
+    // Type-aware mutants are not visible to the filters of other mutators,
+    // so enabling type-aware mutation doesn't change which other mutants are generated
+    const untypedMutantsInScope = allMutantsInScope.filter(
+      (m) => !isTypeAwareMutator(m.mutatorName),
+    );
     for (const mutator of filteringMutators) {
+      const mutantsInScope = isTypeAwareMutator(mutator.name)
+        ? allMutantsInScope
+        : untypedMutantsInScope;
       if (!mutator.filter!(mutantsInScope)) {
         const mutantsToFilterOut = mutantsInScope.filter(
           (mutant) =>

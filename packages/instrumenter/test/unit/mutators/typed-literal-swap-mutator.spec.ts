@@ -89,6 +89,15 @@ roll(2);`;
     ]);
   });
 
+  it('should swap to a negative numeric literal', () => {
+    const code = `declare function compare(order: -1 | 0 | 1): void;
+compare(0);`;
+    expectTypedMutation(sut, code, [
+      replaceLast(code, '0)', '-1)'),
+      replaceLast(code, '0)', '1)'),
+    ]);
+  });
+
   it('should ignore an optional (undefined) member of the union', () => {
     const code = `declare function setStatus(status?: 'on' | 'off'): void;
 setStatus('on');`;

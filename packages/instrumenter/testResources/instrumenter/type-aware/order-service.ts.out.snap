@@ -77,7 +77,12 @@ export function range(start: number, end: number): number[] {
         {}
       } else {
         stryCov_9fa48(\\"15\\");
-        result.push(stryMutAct_9fa48(\\"18\\") ? start : stryMutAct_9fa48(\\"17\\") ? end : (stryCov_9fa48(\\"17\\", \\"18\\"), i));
+        if (stryMutAct_9fa48(\\"16\\")) {
+          ;
+        } else {
+          stryCov_9fa48(\\"16\\");
+          result.push(stryMutAct_9fa48(\\"18\\") ? start : stryMutAct_9fa48(\\"17\\") ? end : (stryCov_9fa48(\\"17\\", \\"18\\"), i));
+        }
       }
     }
     return stryMutAct_9fa48(\\"19\\") ? [] : (stryCov_9fa48(\\"19\\"), result);

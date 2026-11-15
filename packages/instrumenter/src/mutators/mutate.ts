@@ -24,6 +24,14 @@ import { typedLiteralSwapMutator } from './typed-literal-swap-mutator.js';
 import { typedPropertySwapMutator } from './typed-property-swap-mutator.js';
 import { typedTargetSwapMutator } from './typed-target-swap-mutator.js';
 
+/**
+ * Type-aware mutators are prefixed with `Typed`. They only generate mutants when type-aware mutation is enabled,
+ * and enabling them must not change which other mutants are generated.
+ */
+export function isTypeAwareMutator(mutatorName: string): boolean {
+  return mutatorName.startsWith('Typed');
+}
+
 export const allMutators: NodeMutator[] = [
   arithmeticOperatorMutator,
   arrayDeclarationMutator,

@@ -16,6 +16,7 @@ import { ScriptAst, ScriptFormat } from '../../../src/syntax/index.js';
 import { instrumentationBabelHeader } from '../../../src/util/index.js';
 import { MutantPlacer } from '../../../src/mutant-placers/index.js';
 import { NodeMutator } from '../../../src/mutators/index.js';
+import { emptyExpressionMutator } from '../../../src/mutators/empty-expression-mutator.js';
 import { Mutable, Mutant } from '../../../src/mutant.js';
 import { createJSAst, createTSAst } from '../../helpers/factories.js';
 
@@ -246,6 +247,60 @@ describe('babel-transformer', () => {
       expect(plusFilterCall, 'plus filter was not called').ok;
       expect(plusFilterCall!.every((m) => m.mutatorName !== 'FilterableFoo'))
         .true;
+    });
+
+    describe('with type-aware mutators', () => {
+      const typedFooMutator: NodeMutator = { ...fooMutator, name: 'TypedFoo' };
+      const recordingPlusMutator = (name: string): NodeMutator => ({
+        ...plusMutator,
+        name,
+        filter(mutantsInScope) {
+          filterCalls.push([...mutantsInScope]);
+          return mutantsInScope.length === 1;
+        },
+      });
+
+      it('should not pass type-aware mutants to the filter of another mutator', () => {
+        mutators = [recordingPlusMutator('FilterablePlus'), typedFooMutator];
+
+        const ast = createJSAst({ rawContent: 'foo + foo;' });
+        act(ast);
+
+        expect(filterCalls).lengthOf(1);
+        expect(filterCalls[0].map((m) => m.mutatorName)).deep.eq([
+          'FilterablePlus',
+        ]);
+        expect(
+          mutantCollector.mutants.map((m) => m.mutatorName).sort(),
+        ).deep.eq(['FilterablePlus', 'TypedFoo', 'TypedFoo']);
+      });
+
+      it('should pass type-aware mutants to the filter of a type-aware mutator', () => {
+        mutators = [
+          recordingPlusMutator('TypedFilterablePlus'),
+          typedFooMutator,
+        ];
+
+        const ast = createJSAst({ rawContent: 'foo + foo;' });
+        act(ast);
+
+        expect(filterCalls).lengthOf(1);
+        expect(filterCalls[0].map((m) => m.mutatorName)).include('TypedFoo');
+        expect(mutantCollector.mutants.map((m) => m.mutatorName)).not.include(
+          'TypedFilterablePlus',
+        );
+      });
+
+      it('should keep a statement removal when a type-aware mutant is inside the statement', () => {
+        mutators = [emptyExpressionMutator, typedFooMutator];
+
+        const ast = createJSAst({ rawContent: 'foo();' });
+        act(ast);
+
+        expect(mutantCollector.mutants.map((m) => m.mutatorName)).include(
+          'CallExpression',
+        );
+      });
     });
 
     it('should only filter out mutants from the mutator whose filter returned false', () => {
